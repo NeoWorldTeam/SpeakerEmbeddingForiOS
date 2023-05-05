@@ -16,20 +16,15 @@ import onnxruntime_objc
 
 
 
-// Result struct
-struct Result {
+// EmResult struct
+struct EmResult {
     let processTimeMs: Double
     let feature: [Float]
 }
 
 
 
-
-enum OrtModelError: Error {
-    case error(_ message: String)
-}
-
-class ModelHandler: NSObject {
+class SpeakerEmbeddingModelHandler: NSObject {
     // MARK: - Inference Properties
     let threadCount: Int32
     let threadCountLimit = 10
@@ -116,7 +111,7 @@ class ModelHandler: NSObject {
         return floatArray
     }
     
-    func _prediction(inputTensors: [ORTValue]) throws -> Result {
+    func _prediction(inputTensors: [ORTValue]) throws -> EmResult {
         let inputNames = ["wav"]
         let outputNames: Set<String> = ["output"]
         
@@ -137,7 +132,7 @@ class ModelHandler: NSObject {
         let feature = try _parseToFloatArray(value: outputs["output"])
         
         // Return ORT SessionRun result
-        return Result(processTimeMs: interval, feature: feature)
+        return EmResult(processTimeMs: interval, feature: feature)
     }
     
     
@@ -149,7 +144,7 @@ class ModelHandler: NSObject {
 
 
 
-extension ModelHandler {
+extension SpeakerEmbeddingModelHandler {
     func prediction(x: Data) -> [Float]?{
         do {
             let size = x.count / MemoryLayout<Float>.size

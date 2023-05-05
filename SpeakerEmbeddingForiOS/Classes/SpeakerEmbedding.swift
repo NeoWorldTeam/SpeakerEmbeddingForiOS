@@ -4,7 +4,7 @@ import onnxruntime_objc
 
 
 public class SpeakerEmbedding {
-    private var _modelHandler: ModelHandler?
+    private var _modelHandler: SpeakerEmbeddingModelHandler?
     private let expectedFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)
     
     public init() {
@@ -18,7 +18,7 @@ public class SpeakerEmbedding {
             return
         }
         
-        _modelHandler = ModelHandler(modelFilename: "speaker_embedding0", modelExtension: "onnx", threadCount: 4)
+        _modelHandler = SpeakerEmbeddingModelHandler(modelFilename: "speaker_embedding0", modelExtension: "onnx", threadCount: 4)
     }
     
     private func _checkAudioFormat(pcmFormat: AVAudioFormat) -> Bool {

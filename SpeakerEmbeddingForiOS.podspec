@@ -28,9 +28,12 @@ TODO: Add long description of the pod here.
   s.source           = { :git => 'https://github.com/fuhao/SpeakerEmbeddingForiOS.git', :tag => s.version.to_s }
   # s.social_media_url = 'https://twitter.com/<TWITTER_USERNAME>'
 
-  s.ios.deployment_target = '10.0'
-
+  s.ios.deployment_target = '13.0'
+  s.static_framework = true
   s.source_files = 'SpeakerEmbeddingForiOS/Classes/**/*'
+  s.resource_bundles = {
+   'SpeakerEmbedding' => ['SpeakerEmbeddingForiOS/Assets/**/*.{onnx}']
+  }
   
   # s.resource_bundles = {
   #   'SpeakerEmbeddingForiOS' => ['SpeakerEmbeddingForiOS/Assets/*.png']
@@ -38,5 +41,5 @@ TODO: Add long description of the pod here.
 
   # s.public_header_files = 'Pod/Classes/**/*.h'
   # s.frameworks = 'UIKit', 'MapKit'
-  # s.dependency 'AFNetworking', '~> 2.3'
+  s.dependency 'onnxruntime-objc'
 end

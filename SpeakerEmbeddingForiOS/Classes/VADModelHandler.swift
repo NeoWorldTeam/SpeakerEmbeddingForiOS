@@ -59,7 +59,7 @@ class VADModelHandler: NSObject {
     private var env: ORTEnv
     
     init?(modelFilename: String, modelExtension: String, threadCount: Int32 = 1) {
-        guard let associateBundleURL2 = Bundle.main.url(forResource: "Silero_VAD_for_iOS", withExtension: "bundle") else {
+        guard let associateBundleURL2 = Bundle.main.url(forResource: "SpeakerEmbedding", withExtension: "bundle") else {
             return nil
         }
         

@@ -155,22 +155,24 @@ public class VoiceActivityDetector {
         var tempCount = 0
         
         
-        
-        segments.forEach { (start: Int, count: Int) in
-//            let pointer: UnsafeMutablePointer<Float32> = channelPointer.advanced(by: start)
-//            let byteSize = count * MemoryLayout<Float32>.stride
-            let startIndex = start * MemoryLayout<Float>.size
-            let endIndex = (start+count) * MemoryLayout<Float>.size
-            
-            var data = Data(channelPointer[startIndex..<endIndex])
-            tempCount += count
-            if count < windowSampleNums {
-                data.append(Data(repeating: 0, count: windowSampleNums - count))
-            }
+        DispatchQueue.main.sync {
+            segments.forEach { (start: Int, count: Int) in
+                let startIndex = start * MemoryLayout<Float>.size
+                let endIndex = (start+count) * MemoryLayout<Float>.size
+                
+                var data = Data(channelPointer[startIndex..<endIndex])
+                tempCount += count
+                if count < windowSampleNums {
+                    data.append(Data(repeating: 0, count: windowSampleNums - count))
+                }
 
-            let score = modelHandler.prediction(x: data, sr: 16000)
-            scores.append(VADResult(score: score, start: start, end: tempCount-1))
+                let score = modelHandler.prediction(x: data, sr: 16000)
+                scores.append(VADResult(score: score, start: start, end: tempCount-1))
+            }
         }
+        
+        
+
         
         return scores
     }

@@ -68,7 +68,11 @@ public extension SpeakerEmbedding {
             return nil
         }
         
-        return modelHandler.prediction(x: data)
+        var feature: [Float]?
+        DispatchQueue.main.sync {
+            feature = modelHandler.prediction(x: data)
+        }
+        return feature
     }
     
 }

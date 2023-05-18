@@ -44,7 +44,7 @@ public class SpeakerEmbedding {
 
 public extension SpeakerEmbedding {
     func extractFeature(buffer: AVAudioPCMBuffer, range: Range<Int> ) -> [Float]? {
-        guard let modelHandler = _modelHandler else {
+        guard _modelHandler != nil else {
             return nil
         }
         guard _checkAudioFormat(pcmFormat: buffer.format) else {

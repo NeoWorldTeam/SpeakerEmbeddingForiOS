@@ -146,6 +146,34 @@ public class VoiceActivityDetector {
         
         return scores
     }
+    
+    fileprivate func _detectVAD(_ channelPointer: Data, _ windowSampleNums: Int, _ modelHandler: VADModelHandler ) -> [VADResult]  {
+        var scores: [VADResult] = []
+        let frameLength = channelPointer.count / MemoryLayout<Float>.size
+        
+        let segments = divideIntoSegments(frameLength, step: windowSampleNums)
+        var tempCount = 0
+        
+        
+        
+        segments.forEach { (start: Int, count: Int) in
+//            let pointer: UnsafeMutablePointer<Float32> = channelPointer.advanced(by: start)
+//            let byteSize = count * MemoryLayout<Float32>.stride
+            let startIndex = start * MemoryLayout<Float>.size
+            let endIndex = (start+count) * MemoryLayout<Float>.size
+            
+            var data = Data(channelPointer[startIndex..<endIndex])
+            tempCount += count
+            if count < windowSampleNums {
+                data.append(Data(repeating: 0, count: windowSampleNums - count))
+            }
+
+            let score = modelHandler.prediction(x: data, sr: 16000)
+            scores.append(VADResult(score: score, start: start, end: tempCount-1))
+        }
+        
+        return scores
+    }
 }
 
 
@@ -168,12 +196,10 @@ public extension VoiceActivityDetector {
         resetState()
         return _detectVAD(buffer, windowSampleNums, modelHandler)
     }
+
     
-    func detectContinuously(buffer: AVAudioPCMBuffer, windowSampleNums: Int = 512) -> [VADResult]? {
+    func detectContinuously(buffer: Data, windowSampleNums: Int = 512) -> [VADResult]? {
         guard let modelHandler = _modelHandler else {
-            return nil
-        }
-        guard _checkAudioFormat(pcmFormat: buffer.format) else {
             return nil
         }
         
@@ -190,14 +216,16 @@ public extension VoiceActivityDetector {
     }
     
     
-    func detectContinuouslyForTimeStemp(buffer: AVAudioPCMBuffer,
+    
+    
+    func detectContinuouslyForTimeStemp(buffer: Data,
                                         threshold: Float = 0.5,
                                         minSpeechDurationInMS: Int = 250,
                                         maxSpeechDurationInS: Float = 30,
                                         minSilenceDurationInMS: Int = 100,
                                         speechPadInMS: Int = 30,
                                         windowSampleNums: Int = 512) -> [VADTimeResult]? {
-        let sr = buffer.format.sampleRate
+        let sr:Double = 16000
         
         guard let vadResults = detectContinuously(buffer: buffer, windowSampleNums: windowSampleNums) else {
             return nil
@@ -288,7 +316,7 @@ public extension VoiceActivityDetector {
         }
         
         
-        let audio_length_samples = Int(buffer.frameLength)
+        let audio_length_samples = buffer.count / MemoryLayout<Float>.size
         if currentSpeech.start > 0 && (audio_length_samples - currentSpeech.start) > minSpeechSamples {
             currentSpeech.end = audio_length_samples
             speeches.append(currentSpeech)

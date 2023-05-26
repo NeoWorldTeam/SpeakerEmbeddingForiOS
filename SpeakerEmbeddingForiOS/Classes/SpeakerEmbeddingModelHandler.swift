@@ -147,9 +147,11 @@ class SpeakerEmbeddingModelHandler: NSObject {
 extension SpeakerEmbeddingModelHandler {
     func prediction(x: Data) -> [Float]?{
         do {
-            let size = x.count / MemoryLayout<Float>.size
-            let inputShape: [NSNumber] = [batchSize as NSNumber,
-                                          size as NSNumber]
+            let itemSize = x.count / MemoryLayout<Float>.size
+            let time = itemSize / 201 / 2
+            let inputShape: [NSNumber] = [201 as NSNumber,
+                                          time as NSNumber,
+                                          2 as NSNumber]
             let xTensor:ORTValue = try ORTValue(tensorData: NSMutableData(data: x),
                                            elementType: ORTTensorElementDataType.float,
                                            shape: inputShape)

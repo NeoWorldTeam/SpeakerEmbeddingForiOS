@@ -43,25 +43,25 @@ public class SpeakerEmbedding {
 
 
 public extension SpeakerEmbedding {
-    func extractFeature(buffer: AVAudioPCMBuffer, range: Range<Int> ) -> [Float]? {
-        guard _modelHandler != nil else {
-            return nil
-        }
-        guard _checkAudioFormat(pcmFormat: buffer.format) else {
-            return nil
-        }
-        let channelData: UnsafePointer<UnsafeMutablePointer<Float32>> = buffer.floatChannelData!
-        let channelPointer: UnsafeMutablePointer<Float32> = channelData[0]
-        let frameLength = Int(buffer.frameLength)
-        
-        let startIndex = range.lowerBound
-        let count = min(range.count, (frameLength - startIndex)) * MemoryLayout<Float32>.stride
-        
-        let pointer: UnsafeMutablePointer<Float32> = channelPointer.advanced(by: startIndex)
-        let data = Data(bytes: pointer, count: count)
-        
-        return extractFeature(data: data)
-    }
+//    func extractFeature(buffer: AVAudioPCMBuffer, range: Range<Int> ) -> [Float]? {
+//        guard _modelHandler != nil else {
+//            return nil
+//        }
+//        guard _checkAudioFormat(pcmFormat: buffer.format) else {
+//            return nil
+//        }
+//        let channelData: UnsafePointer<UnsafeMutablePointer<Float32>> = buffer.floatChannelData!
+//        let channelPointer: UnsafeMutablePointer<Float32> = channelData[0]
+//        let frameLength = Int(buffer.frameLength)
+//
+//        let startIndex = range.lowerBound
+//        let count = min(range.count, (frameLength - startIndex)) * MemoryLayout<Float32>.stride
+//
+//        let pointer: UnsafeMutablePointer<Float32> = channelPointer.advanced(by: startIndex)
+//        let data = Data(bytes: pointer, count: count)
+//
+//        return extractFeature(data: data)
+//    }
     
     func extractFeature(data: Data) -> [Float]? {
         guard let modelHandler = _modelHandler else {
@@ -69,9 +69,14 @@ public extension SpeakerEmbedding {
         }
         
         var feature: [Float]?
-        DispatchQueue.main.sync {
+        if Thread.isMainThread {
             feature = modelHandler.prediction(x: data)
+        } else {
+            DispatchQueue.main.sync {
+                feature = modelHandler.prediction(x: data)
+            }
         }
+        
         return feature
     }
     

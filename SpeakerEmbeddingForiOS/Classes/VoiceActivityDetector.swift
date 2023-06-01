@@ -222,9 +222,9 @@ public extension VoiceActivityDetector {
     
     func detectContinuouslyForTimeStemp(buffer: Data,
                                         threshold: Float = 0.5,
-                                        minSpeechDurationInMS: Int = 250,
+                                        minSpeechDurationInMS: Int = 800,
                                         maxSpeechDurationInS: Float = 30,
-                                        minSilenceDurationInMS: Int = 100,
+                                        minSilenceDurationInMS: Int = 800,
                                         speechPadInMS: Int = 30,
                                         windowSampleNums: Int = 512) -> [VADTimeResult]? {
         let sr:Double = 16000
@@ -232,6 +232,9 @@ public extension VoiceActivityDetector {
         guard let vadResults = detectContinuously(buffer: buffer, windowSampleNums: windowSampleNums) else {
             return nil
         }
+        
+        
+        
 
         
         let minSpeechSamples = Int(sr * Double(minSpeechDurationInMS) * 0.001)
@@ -319,8 +322,8 @@ public extension VoiceActivityDetector {
         
         
         let audio_length_samples = buffer.count / MemoryLayout<Float>.size
-        if currentSpeech.start > 0 && (audio_length_samples - currentSpeech.start) > minSpeechSamples {
-            currentSpeech.end = audio_length_samples
+        if currentSpeech.start > 0 && (prev_end - currentSpeech.start) > minSpeechSamples {
+            currentSpeech.end = prev_end
             speeches.append(currentSpeech)
         }
         

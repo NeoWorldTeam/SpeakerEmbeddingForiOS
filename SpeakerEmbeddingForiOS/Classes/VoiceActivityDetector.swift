@@ -15,13 +15,14 @@ enum DetectMode {
 }
 
 public struct VADResult {
-    public var score: Float, start: Int, end: Int
+    public var score: Float = -1
+    public var start: Int = -1
+    public var end: Int = -1
+    public func count() -> Int{
+        return end - start
+    }
 }
 
-public struct VADTimeResult {
-    public var start: Int = 0
-    public var end: Int = 0
-}
 
 
 extension Data {
@@ -218,15 +219,152 @@ public extension VoiceActivityDetector {
     }
     
     
+    func vad_test_print(index: Int, c: String) {
+        guard index < 10 else {
+            return
+        }
+        print("vad test: \(index + 1) times step: \(c)")
+    }
     
+    func splitByThreshold(vadResults: ArraySlice<VADResult>,threshold : Float) -> [VADResult] {
+//        print("===== start")
+//        for index in 0..<min(vadResults.count, 10) {
+//            print(vadResults[index].score)
+//        }
+//
+//        print("===== end")
+//        for index in max(0, vadResults.count - 10)..<vadResults.count {
+//            print(vadResults[index].score)
+//        }
+        
+        var splitByThreshold: [VADResult] = []
+        var currentVadResult:VADResult = VADResult()
+        for (i, vadResult) in vadResults.enumerated() {
+            let neg_threshold = currentVadResult.start < 0 ? threshold : threshold - 0.15
+            let isActivate = vadResult.score > neg_threshold
+
+            if isActivate {
+                if currentVadResult.start < 0 {
+                    currentVadResult.start = i
+                }
+            }else {
+                if currentVadResult.start >= 0 && currentVadResult.end < 0{
+                    currentVadResult.end = i
+                    splitByThreshold.append(currentVadResult)
+                    currentVadResult = VADResult()
+                }
+            }
+        }
+        
+        if currentVadResult.start >= 0 {
+            currentVadResult.end = vadResults.count
+            splitByThreshold.append(currentVadResult)
+        }
+        
+        
+
+        return splitByThreshold
+    }
     
-    func detectContinuouslyForTimeStemp(buffer: Data,
+    func mergeByLimit(limitVadResults: [VADResult], minSpeechSamples: Int, minSilenceSample: Int) -> [VADResult] {
+        var mergeByLimit: [VADResult] = []
+        var currentVadResult:VADResult = VADResult()
+        let vvvv = 30 * 16000 / 512
+        for (i, vadResult) in limitVadResults.enumerated() {
+            guard currentVadResult.start > 0 else {
+                currentVadResult.start = vadResult.start
+                currentVadResult.end = vadResult.end
+                continue
+            }
+            //TODO: 30实际值
+            guard vadResult.end - currentVadResult.start < vvvv else {
+                if currentVadResult.count() > minSpeechSamples {
+                    mergeByLimit.append(currentVadResult)
+                }
+                
+                currentVadResult = VADResult()
+                currentVadResult.start = vadResult.start
+                currentVadResult.end = vadResult.end
+                continue
+            }
+            
+            
+            guard vadResult.start - currentVadResult.end > minSilenceSample else {
+                //不满足中断时间,拼接
+                currentVadResult.end = vadResult.end
+                continue
+            }
+            
+            //满足生成段落
+            if currentVadResult.count() > minSpeechSamples {
+                mergeByLimit.append(currentVadResult)
+                currentVadResult = VADResult()
+                currentVadResult.start = vadResult.start
+                currentVadResult.end = vadResult.end
+            }
+
+
+        }
+        
+        //满足生成段落
+        if currentVadResult.start >= 0 && currentVadResult.count() > minSpeechSamples {
+            mergeByLimit.append(currentVadResult)
+        }
+        
+        
+        return mergeByLimit
+    }
+    
+    func splitByMaxLimit(vadResults: ArraySlice<VADResult>, threshold: Float, splitResults: [VADResult], maxSpeechSamples: Int)  -> [VADResult] {
+        var splitByMaxLimit: [VADResult] = []
+        for vadResult in splitResults {
+            guard vadResult.count() > maxSpeechSamples else {
+                splitByMaxLimit.append(vadResult)
+                continue
+            }
+            let waitSplitVadResults = vadResults[vadResult.start..<vadResult.end]
+            let newThreshold = threshold - 0.1
+            
+            let splitVadResults = splitByThreshold(vadResults: waitSplitVadResults, threshold: newThreshold)
+            let results = self.splitByMaxLimit(vadResults: vadResults, threshold: newThreshold, splitResults: splitVadResults, maxSpeechSamples: maxSpeechSamples)
+            splitByMaxLimit.append(contentsOf: results)
+            
+        }
+        return splitByMaxLimit
+    }
+    
+    func filterLastChunk(vadResults: ArraySlice<VADResult>, splitResults: [VADResult]) -> VADResult {
+        guard let lastChunk = splitResults.last else {
+            return VADResult()
+        }
+        
+        
+        guard vadResults.count - lastChunk.end < 2 else {
+            return VADResult()
+        }
+        
+        
+        //TODO: 5实际值
+        let vvv = 5 * 16000 / 512
+        guard lastChunk.count() > vvv else {
+            return lastChunk
+        }
+        
+        //find split threshold
+        guard let splitIndex = vadResults[vvv..<vadResults.count].enumerated().min(by: {$0.element.score < $1.element.score})?.offset else {
+            return VADResult()
+        }
+        
+        return VADResult(start: vvv+splitIndex, end: lastChunk.end)
+    }
+    
+    func  detectContinuouslyForTimeStemp(buffer: Data,
                                         threshold: Float = 0.5,
-                                        minSpeechDurationInMS: Int = 800,
+                                        minSpeechDurationInMS: Int = 300,
                                         maxSpeechDurationInS: Float = 30,
-                                        minSilenceDurationInMS: Int = 800,
+                                        minSilenceDurationInMS: Int = 100,
                                         speechPadInMS: Int = 30,
-                                        windowSampleNums: Int = 512) -> [VADTimeResult]? {
+                                        windowSampleNums: Int = 512) -> [VADResult]? {
         let sr:Double = 16000
         
         guard let vadResults = detectContinuously(buffer: buffer, windowSampleNums: windowSampleNums) else {
@@ -234,98 +372,150 @@ public extension VoiceActivityDetector {
         }
         
         
-        
+//        print("===== start")
+//        for index in 0..<min(vadResults.count, 10) {
+//            print(vadResults[index].score)
+//        }
+//
+//        print("===== end")
+//        for index in max(0, vadResults.count - 10)..<vadResults.count {
+//            print(vadResults[index].score)
+//        }
+
 
         
-        let minSpeechSamples = Int(sr * Double(minSpeechDurationInMS) * 0.001)
-        let maxSpeechSamples = Int(sr * Double(maxSpeechDurationInS))
-        let minSilenceSample = Int(sr * Double(minSilenceDurationInMS) * 0.001)
-        let minSilenceSampleAtMaxSpeech = Int(sr * Double(0.098))
+        let minSpeechSamples = Int(sr * Double(minSpeechDurationInMS) * 0.001) / windowSampleNums
+        let maxSpeechSamples = Int(sr * Double(maxSpeechDurationInS)) / windowSampleNums
+        let minSilenceSample = Int(sr * Double(minSilenceDurationInMS) * 0.001) / windowSampleNums
+//        let minSilenceSampleAtMaxSpeech = Int(sr * Double(0.098)) / windowSampleNums
         let speechPadSamples = Int(sr *  Double(speechPadInMS) * 0.001)
-        
-        
-        var triggered = false
-        var speeches = [VADTimeResult]()
-        var currentSpeech = VADTimeResult()
-        
-        let neg_threshold = threshold - 0.15
-        var temp_end = 0
-        var prev_end = 0
-        var next_start = 0
-        
-        
-        
-        for (i, speech) in vadResults.enumerated() {
-            let speech_prob = speech.score
-            if speech_prob >= threshold && temp_end != 0 {
-                temp_end = 0
-                if next_start < prev_end {
-                    next_start = windowSampleNums * i
-                }
-            }
-            
-            
-            if speech_prob >= threshold && !triggered {
-                triggered = true
-                currentSpeech.start = windowSampleNums * i
-                continue
-            }
-            
-            if triggered && (windowSampleNums * i) - currentSpeech.start > maxSpeechSamples {
-                if prev_end != 0 {
-                    currentSpeech.end = prev_end
-                    speeches.append(currentSpeech)
-                    currentSpeech = VADTimeResult()
-                    if next_start < prev_end {
-                        triggered = false
-                    } else {
-                        currentSpeech.start = next_start
-                    }
-                    prev_end = 0
-                    next_start = 0
-                    temp_end = 0
-                } else {
-                    currentSpeech.end = windowSampleNums * i
-                    speeches.append(currentSpeech)
-                    currentSpeech = VADTimeResult()
-                    prev_end = 0
-                    next_start = 0
-                    temp_end = 0
-                    triggered = false
-                    continue
-                }
-            }
-            
-            if speech_prob < neg_threshold && triggered {
-                if temp_end == 0 {
-                    temp_end = windowSampleNums * i
-                }
-                if (windowSampleNums * i) - temp_end > minSilenceSampleAtMaxSpeech {
-                    prev_end = temp_end
-                }
-                if (windowSampleNums * i) - temp_end < minSilenceSample {
-                    continue
-                } else {
-                    currentSpeech.end = temp_end
-                    if (currentSpeech.end - currentSpeech.start) > minSpeechSamples {
-                        speeches.append(currentSpeech)
-                    }
-                    currentSpeech = VADTimeResult()
-                    prev_end = 0
-                    next_start = 0
-                    temp_end = 0
-                    triggered = false
-                    continue
-                }
-            }
-        }
-        
-        
         let audio_length_samples = buffer.count / MemoryLayout<Float>.size
-        if currentSpeech.start > 0 && (prev_end - currentSpeech.start) > minSpeechSamples {
-            currentSpeech.end = prev_end
-            speeches.append(currentSpeech)
+        
+        //split by threshold
+        let splitByThreshold: [VADResult] = splitByThreshold(vadResults: vadResults.prefix(vadResults.count),threshold: threshold)
+        print("splitByThreshold count:\(splitByThreshold.count)")
+        var splitByMaxLimit: [VADResult] = splitByMaxLimit(vadResults: vadResults.prefix(vadResults.count), threshold: threshold, splitResults: splitByThreshold, maxSpeechSamples: maxSpeechSamples)
+        print("splitByMaxLimit count:\(splitByMaxLimit.count)")
+        var lastChunk:VADResult = filterLastChunk(vadResults: vadResults.prefix(vadResults.count), splitResults: splitByMaxLimit)
+        if lastChunk.start > 0 {
+            print("lastChunk.start:\(lastChunk.start)")
+            splitByMaxLimit[splitByMaxLimit.count - 1].end = lastChunk.start
+            lastChunk.start = lastChunk.start * windowSampleNums
+            lastChunk.end = lastChunk.end * windowSampleNums
         }
+        //TODO: 通过lastChunk获取分数列表
+        
+        //merge by time limit
+        var speeches: [VADResult] = mergeByLimit(limitVadResults: splitByMaxLimit, minSpeechSamples: minSpeechSamples, minSilenceSample: minSilenceSample)
+        print("speeches count:\(speeches.count)")
+        speeches = speeches.map({ result in
+            VADResult(start: result.start * windowSampleNums, end: result.end * windowSampleNums)
+        })
+        
+        
+        
+        
+        
+        
+        
+        
+//        var triggered = false
+//        var speeches = [VADResult]()
+//        var currentSpeech = VADResult()
+//
+//        let neg_threshold = threshold - 0.15
+//        var temp_end: Int = 0
+//        var prev_end: Int = 0
+//        var next_start: Int = 0
+//
+//
+//
+//        for (i, speech) in vadResults.enumerated() {
+//            vad_test_print(index: i, c: "1")
+//
+//            let speech_prob = speech.score
+//            if speech_prob >= threshold && temp_end != 0 {
+//                vad_test_print(index: i, c: "2 temp_end:\(temp_end)")
+//                temp_end = 0
+//                if next_start < prev_end {
+//                    vad_test_print(index: i, c: "3")
+//                    next_start = windowSampleNums * i
+//                }
+//            }
+//
+//
+//            if speech_prob >= threshold && !triggered {
+//                vad_test_print(index: i, c: "4")
+//                triggered = true
+//                currentSpeech.start = windowSampleNums * i
+//                continue
+//            }
+//
+//            if triggered && (windowSampleNums * i) - currentSpeech.start > maxSpeechSamples {
+//                vad_test_print(index: i, c: "5")
+//                if prev_end != 0 {
+//                    vad_test_print(index: i, c: "6")
+//                    currentSpeech.end = prev_end
+//                    speeches.append(currentSpeech)
+//                    currentSpeech = VADResult()
+//                    if next_start < prev_end {
+//                        triggered = false
+//                    } else {
+//                        currentSpeech.start = next_start
+//                    }
+//                    prev_end = 0
+//                    next_start = 0
+//                    temp_end = 0
+//                } else {
+//                    vad_test_print(index: i, c: "7")
+//                    currentSpeech.end = windowSampleNums * i
+//                    speeches.append(currentSpeech)
+//                    currentSpeech = VADResult()
+//                    prev_end = 0
+//                    next_start = 0
+//                    temp_end = 0
+//                    triggered = false
+//                    continue
+//                }
+//            }
+//
+//            if speech_prob < neg_threshold && triggered {
+//                vad_test_print(index: i, c: "8")
+//                if temp_end == 0 {
+//                    vad_test_print(index: i, c: "9")
+//                    temp_end = windowSampleNums * i
+//                }
+//                if (windowSampleNums * i) - temp_end > minSilenceSampleAtMaxSpeech {
+//                    vad_test_print(index: i, c: "10")
+//                    prev_end = temp_end
+//                }
+//                if (windowSampleNums * i) - temp_end < minSilenceSample {
+//                    vad_test_print(index: i, c: "11")
+//                    continue
+//                } else {
+//                    vad_test_print(index: i, c: "12")
+//                    currentSpeech.end = temp_end
+//                    if (currentSpeech.end - currentSpeech.start) > minSpeechSamples {
+//                        vad_test_print(index: i, c: "13")
+//                        speeches.append(currentSpeech)
+//                    }
+//                    currentSpeech = VADResult()
+//                    prev_end = 0
+//                    next_start = 0
+//                    temp_end = 0
+//                    triggered = false
+//                    continue
+//                }
+//            }
+//        }
+//
+//        print("1 speeches count: \(speeches.count)")
+//
+//        if currentSpeech.start >= 0 && (audio_length_samples - currentSpeech.start) > minSpeechSamples {
+//            currentSpeech.end = prev_end
+//            speeches.append(currentSpeech)
+//        }
+//        print("2 speeches count: \(speeches.count)")
         
         
         for i in 0..<speeches.count {
@@ -347,8 +537,7 @@ public extension VoiceActivityDetector {
             }
         }
 
-        
-        
+        speeches.append(lastChunk)
         return speeches
     }
     
@@ -386,7 +575,7 @@ public extension VoiceActivityDetector {
                             maxSpeechDurationInS: Float = 30,
                             minSilenceDurationInMS: Int = 100,
                             speechPadInMS: Int = 30,
-                            windowSampleNums: Int = 512) -> [VADTimeResult]? {
+                            windowSampleNums: Int = 512) -> [VADResult]? {
         
         let sr = buffer.format.sampleRate
         
@@ -409,8 +598,8 @@ public extension VoiceActivityDetector {
         
         
         var triggered = false
-        var speeches = [VADTimeResult]()
-        var currentSpeech = VADTimeResult()
+        var speeches = [VADResult]()
+        var currentSpeech = VADResult()
         
         let neg_threshold = threshold - 0.15
         var temp_end = 0
@@ -439,7 +628,7 @@ public extension VoiceActivityDetector {
                 if prev_end != 0 {
                     currentSpeech.end = prev_end
                     speeches.append(currentSpeech)
-                    currentSpeech = VADTimeResult()
+                    currentSpeech = VADResult()
                     if next_start < prev_end {
                         triggered = false
                     } else {
@@ -451,7 +640,7 @@ public extension VoiceActivityDetector {
                 } else {
                     currentSpeech.end = windowSampleNums * i
                     speeches.append(currentSpeech)
-                    currentSpeech = VADTimeResult()
+                    currentSpeech = VADResult()
                     prev_end = 0
                     next_start = 0
                     temp_end = 0
@@ -474,7 +663,7 @@ public extension VoiceActivityDetector {
                     if (currentSpeech.end - currentSpeech.start) > minSpeechSamples {
                         speeches.append(currentSpeech)
                     }
-                    currentSpeech = VADTimeResult()
+                    currentSpeech = VADResult()
                     prev_end = 0
                     next_start = 0
                     temp_end = 0

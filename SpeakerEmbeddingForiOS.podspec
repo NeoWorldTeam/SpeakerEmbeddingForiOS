@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'SpeakerEmbeddingForiOS'
-  s.version          = '0.3.1'
+  s.version          = '0.3.2'
   s.summary          = 'A short description of SpeakerEmbeddingForiOS.'
 
 # This description is used to generate tags and improve search results.
@@ -21,11 +21,11 @@ Pod::Spec.new do |s|
 TODO: Add long description of the pod here.
                        DESC
 
-  s.homepage         = 'https://github.com/tangfuhao/SpeakerEmbeddingForiOS'
+  s.homepage         = 'https://github.com/NeoWorldTeam/SpeakerEmbeddingForiOS'
   # s.screenshots     = 'www.example.com/screenshots_1', 'www.example.com/screenshots_2'
   s.license          = { :type => 'MIT', :file => 'LICENSE' }
   s.author           = { 'fuhao' => 'fangshiyu2@gmail.com' }
-  s.source           = { :git => 'git@github.com:tangfuhao/SpeakerEmbeddingForiOS.git', :tag => s.version.to_s }
+  s.source           = { :git => 'git@github.com:NeoWorldTeam/SpeakerEmbeddingForiOS.git  ', :tag => s.version.to_s }
   # s.social_media_url = 'https://twitter.com/<TWITTER_USERNAME>'
 
   s.ios.deployment_target = '13.0'

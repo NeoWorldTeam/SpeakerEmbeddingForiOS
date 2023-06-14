@@ -271,7 +271,7 @@ public extension VoiceActivityDetector {
         var currentVadResult:VADResult = VADResult()
         let vvvv = 30 * 16000 / 512
         for (i, vadResult) in limitVadResults.enumerated() {
-            guard currentVadResult.start > 0 else {
+            guard currentVadResult.start >= 0 else {
                 currentVadResult.start = vadResult.start
                 currentVadResult.end = vadResult.end
                 continue
@@ -298,6 +298,10 @@ public extension VoiceActivityDetector {
             //满足生成段落
             if currentVadResult.count() > minSpeechSamples {
                 mergeByLimit.append(currentVadResult)
+                currentVadResult = VADResult()
+                currentVadResult.start = vadResult.start
+                currentVadResult.end = vadResult.end
+            }else{
                 currentVadResult = VADResult()
                 currentVadResult.start = vadResult.start
                 currentVadResult.end = vadResult.end
@@ -362,7 +366,7 @@ public extension VoiceActivityDetector {
                                         threshold: Float = 0.5,
                                         minSpeechDurationInMS: Int = 300,
                                         maxSpeechDurationInS: Float = 30,
-                                        minSilenceDurationInMS: Int = 100,
+                                        minSilenceDurationInMS: Int = 2000,
                                         speechPadInMS: Int = 30,
                                         windowSampleNums: Int = 512) -> [VADResult]? {
         let sr:Double = 16000
@@ -370,20 +374,7 @@ public extension VoiceActivityDetector {
         guard let vadResults = detectContinuously(buffer: buffer, windowSampleNums: windowSampleNums) else {
             return nil
         }
-        
-        
-//        print("===== start")
-//        for index in 0..<min(vadResults.count, 10) {
-//            print(vadResults[index].score)
-//        }
-//
-//        print("===== end")
-//        for index in max(0, vadResults.count - 10)..<vadResults.count {
-//            print(vadResults[index].score)
-//        }
 
-
-        
         let minSpeechSamples = Int(sr * Double(minSpeechDurationInMS) * 0.001) / windowSampleNums
         let maxSpeechSamples = Int(sr * Double(maxSpeechDurationInS)) / windowSampleNums
         let minSilenceSample = Int(sr * Double(minSilenceDurationInMS) * 0.001) / windowSampleNums
@@ -396,6 +387,9 @@ public extension VoiceActivityDetector {
         print("splitByThreshold count:\(splitByThreshold.count)")
         var splitByMaxLimit: [VADResult] = splitByMaxLimit(vadResults: vadResults.prefix(vadResults.count), threshold: threshold, splitResults: splitByThreshold, maxSpeechSamples: maxSpeechSamples)
         print("splitByMaxLimit count:\(splitByMaxLimit.count)")
+        for item in splitByMaxLimit {
+            print("start: \(item.start), end: \(item.end)")
+        }
         var lastChunk:VADResult = filterLastChunk(vadResults: vadResults.prefix(vadResults.count), splitResults: splitByMaxLimit)
         if lastChunk.start > 0 {
             print("lastChunk.start:\(lastChunk.start)")
@@ -407,6 +401,10 @@ public extension VoiceActivityDetector {
         
         //merge by time limit
         var speeches: [VADResult] = mergeByLimit(limitVadResults: splitByMaxLimit, minSpeechSamples: minSpeechSamples, minSilenceSample: minSilenceSample)
+//        if splitByMaxLimit.count > 1 && speeches.count == 0 {
+//            speeches = mergeByLimit(limitVadResults: splitByMaxLimit, minSpeechSamples: minSpeechSamples, minSilenceSample: minSilenceSample)
+//        }
+        
         print("speeches count:\(speeches.count)")
         speeches = speeches.map({ result in
             VADResult(start: result.start * windowSampleNums, end: result.end * windowSampleNums)
